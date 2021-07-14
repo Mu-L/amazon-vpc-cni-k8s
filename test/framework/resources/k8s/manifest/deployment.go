@@ -28,8 +28,12 @@ type DeploymentBuilder struct {
 	replicas               int
 	container              corev1.Container
 	labels                 map[string]string
+	nodeSelector           map[string]string
 	terminationGracePeriod int
 	nodeName               string
+	hostNetwork            bool
+	volume                 []corev1.Volume
+	volumeMount            []corev1.VolumeMount
 }
 
 func NewBusyBoxDeploymentBuilder() *DeploymentBuilder {
@@ -39,6 +43,7 @@ func NewBusyBoxDeploymentBuilder() *DeploymentBuilder {
 		replicas:               10,
 		container:              NewBusyBoxContainerBuilder().Build(),
 		labels:                 map[string]string{"role": "test"},
+		nodeSelector:           map[string]string{},
 		terminationGracePeriod: 0,
 	}
 }
@@ -48,7 +53,13 @@ func NewDefaultDeploymentBuilder() *DeploymentBuilder {
 		namespace:              utils.DefaultTestNamespace,
 		terminationGracePeriod: 0,
 		labels:                 map[string]string{"role": "test"},
+		nodeSelector:           map[string]string{},
 	}
+}
+
+func (d *DeploymentBuilder) NodeSelector(labelKey string, labelVal string) *DeploymentBuilder {
+	d.nodeSelector[labelKey] = labelVal
+	return d
 }
 
 func (d *DeploymentBuilder) Namespace(namespace string) *DeploymentBuilder {
@@ -86,8 +97,19 @@ func (d *DeploymentBuilder) PodLabel(labelKey string, labelValue string) *Deploy
 	return d
 }
 
+func (d *DeploymentBuilder) HostNetwork(hostNetwork bool) *DeploymentBuilder {
+	d.hostNetwork = hostNetwork
+	return d
+}
+
+func (d *DeploymentBuilder) MountVolume(volume []corev1.Volume, volumeMount []corev1.VolumeMount) *DeploymentBuilder {
+	d.volume = volume
+	d.volumeMount = volumeMount
+	return d
+}
+
 func (d *DeploymentBuilder) Build() *v1.Deployment {
-	return &v1.Deployment{
+	deploymentSpec := &v1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      d.name,
 			Namespace: d.namespace,
@@ -103,6 +125,8 @@ func (d *DeploymentBuilder) Build() *v1.Deployment {
 					Labels: d.labels,
 				},
 				Spec: corev1.PodSpec{
+					HostNetwork:                   d.hostNetwork,
+					NodeSelector:                  d.nodeSelector,
 					Containers:                    []corev1.Container{d.container},
 					TerminationGracePeriodSeconds: aws.Int64(int64(d.terminationGracePeriod)),
 					NodeName:                      d.nodeName,
@@ -110,4 +134,10 @@ func (d *DeploymentBuilder) Build() *v1.Deployment {
 			},
 		},
 	}
+
+	if len(d.volume) > 0 && len(d.volumeMount) > 0 {
+		deploymentSpec.Spec.Template.Spec.Volumes = d.volume
+		deploymentSpec.Spec.Template.Spec.Containers[0].VolumeMounts = d.volumeMount
+	}
+	return deploymentSpec
 }

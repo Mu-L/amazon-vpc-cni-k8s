@@ -33,6 +33,7 @@ var maxIPPerInterface int
 var primaryNode v1.Node
 var secondaryNode v1.Node
 var instanceSecurityGroupID string
+var vpcCIDRs []string
 
 func TestCNIPodNetworking(t *testing.T) {
 	RegisterFailHandler(Fail)
@@ -76,6 +77,14 @@ var _ = BeforeSuite(func() {
 
 	maxIPPerInterface = int(*instanceOutput[0].NetworkInfo.Ipv4AddressesPerInterface)
 
+	By("describing the VPC to get the VPC CIDRs")
+	describeVPCOutput, err := f.CloudServices.EC2().DescribeVPC(f.Options.AWSVPCID)
+	Expect(err).ToNot(HaveOccurred())
+
+	for _, cidrBlockAssociationSet := range describeVPCOutput.Vpcs[0].CidrBlockAssociationSet {
+		vpcCIDRs = append(vpcCIDRs, *cidrBlockAssociationSet.CidrBlock)
+	}
+
 	// Set the WARM_ENI_TARGET to 0 to prevent all pods being scheduled on secondary ENI
 	k8sUtils.AddEnvVarToDaemonSetAndWaitTillUpdated(f, "aws-node", "kube-system",
 		"aws-node", map[string]string{"WARM_IP_TARGET": "3", "WARM_ENI_TARGET": "0"})
@@ -86,6 +95,13 @@ var _ = AfterSuite(func() {
 	f.K8sResourceManagers.NamespaceManager().
 		DeleteAndWaitTillNamespaceDeleted(utils.DefaultTestNamespace)
 
-	k8sUtils.RemoveVarFromDaemonSetAndWaitTillUpdated(f, "aws-node", "kube-system",
-		"aws-node", map[string]struct{}{"WARM_IP_TARGET": {}, "WARM_ENI_TARGET": {}})
+	k8sUtils.UpdateEnvVarOnDaemonSetAndWaitUntilReady(f, "aws-node", "kube-system",
+		"aws-node", map[string]string{
+			AWS_VPC_ENI_MTU:            "9001",
+			AWS_VPC_K8S_CNI_VETHPREFIX: "eni",
+		},
+		map[string]struct{}{
+			"WARM_IP_TARGET":  {},
+			"WARM_ENI_TARGET": {},
+		})
 })

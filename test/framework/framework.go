@@ -15,9 +15,11 @@ package framework
 
 import (
 	eniConfig "github.com/aws/amazon-vpc-cni-k8s/pkg/apis/crd/v1alpha1"
+	"github.com/aws/amazon-vpc-cni-k8s/test/framework/controller"
+	"github.com/aws/amazon-vpc-cni-k8s/test/framework/helm"
 	"github.com/aws/amazon-vpc-cni-k8s/test/framework/resources/aws"
 	"github.com/aws/amazon-vpc-cni-k8s/test/framework/resources/k8s"
-
+	sgp "github.com/aws/amazon-vpc-resource-controller-k8s/apis/vpcresources/v1beta1"
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -32,6 +34,7 @@ type Framework struct {
 	K8sClient           client.Client
 	CloudServices       aws.Cloud
 	K8sResourceManagers k8s.ResourceManagers
+	InstallationManager controller.InstallationManager
 }
 
 func New(options Options) *Framework {
@@ -47,6 +50,7 @@ func New(options Options) *Framework {
 	k8sSchema := runtime.NewScheme()
 	clientgoscheme.AddToScheme(k8sSchema)
 	eniConfig.AddToScheme(k8sSchema)
+	sgp.AddToScheme(k8sSchema)
 
 	stopChan := ctrl.SetupSignalHandler()
 	cache, err := cache.New(config, cache.Options{Scheme: k8sSchema})
@@ -68,12 +72,15 @@ func New(options Options) *Framework {
 		StatusClient: realClient,
 	}
 
-	cloudConfig := aws.CloudConfig{Region: options.AWSRegion, VpcID: options.AWSVPCID}
+	cloudConfig := aws.CloudConfig{Region: options.AWSRegion, VpcID: options.AWSVPCID,
+		EKSEndpoint: options.EKSEndpoint}
 
 	return &Framework{
 		Options:             options,
 		K8sClient:           k8sClient,
 		CloudServices:       aws.NewCloud(cloudConfig),
 		K8sResourceManagers: k8s.NewResourceManager(k8sClient, k8sSchema, config),
+		InstallationManager: controller.NewDefaultInstallationManager(
+			helm.NewDefaultReleaseManager(options.KubeConfig)),
 	}
 }

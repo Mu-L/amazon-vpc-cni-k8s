@@ -11,6 +11,10 @@
 // express or implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package k8sapi
+package controller
 
-//go:generate go run github.com/golang/mock/mockgen -destination mocks/k8sapi_mocks.go -copyright_file ../../scripts/copyright.txt . K8SAPIs
+const (
+	CNIMetricsHelperChartDir    = "/test/helm/charts/cni-metrics-helper"
+	CNIMetricsHelperReleaseName = "cni-metrics-helper"
+	CNIMetricHelperNamespace    = "kube-system"
+)
